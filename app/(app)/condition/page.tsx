@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Header } from "@/components/layout/header"
-import { Moon, Pill, Scale } from "lucide-react"
+import { Moon, Pill } from "lucide-react"
 import type { DailyConditionLog, MealLog } from "@/lib/supabase/types"
 import { ConditionForm } from "./condition-form"
 import { MealsSection } from "./meals-section"
 import { Big3Card } from "./big3-card"
 import { TrendsSection } from "./trends-section"
+import { WeightCard } from "./weight-card"
 
 function todayJST(): string {
   // YYYY-MM-DD（日本時間）
@@ -109,33 +110,12 @@ export default async function ConditionPage() {
         <MealsSection userId={user.id} date={today} initialMeals={todaysMeals} />
 
         {/* 今日の体重 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Scale size={16} className="text-navy-500" />
-              体重
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {latestWeight?.weight_kg ? (
-              <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-bold text-gray-900">
-                  {latestWeight.weight_kg}
-                  <span className="text-base font-medium text-gray-500 ml-1">kg</span>
-                </span>
-                <span className="text-xs text-gray-400">
-                  {new Date(latestWeight.measured_at).toLocaleDateString("ja-JP", {
-                    month: "numeric",
-                    day: "numeric",
-                  })}{" "}
-                  記録
-                </span>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">未記録</p>
-            )}
-          </CardContent>
-        </Card>
+        <WeightCard
+          userId={user.id}
+          date={today}
+          latestWeight={bodyWeight}
+          latestDate={latestWeight?.measured_at ?? null}
+        />
 
         {/* BIG3 */}
         <Big3Card userId={user.id} bodyWeight={bodyWeight} />

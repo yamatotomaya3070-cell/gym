@@ -1,6 +1,6 @@
 // 食事画像 → カロリー/PFC 推定。
 // プロバイダ差し替え可能なように、入出力をこのファイル内で完結させる。
-// 現在は OpenAI Vision (gpt-4o-mini) を使用。
+// 現在は Google Gemini API (gemini-2.0-flash) を使用。
 // サーバー専用：必ず API ルートからのみ呼び出すこと（API キーをクライアントへ漏らさない）。
 
 import "server-only"
@@ -36,11 +36,13 @@ export class MealAnalysisError extends Error {
   }
 }
 
-// OpenAI 画像入力上限の安全側マージン（base64化で約1.33倍に膨らむため元ファイル換算）
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024 // 8MB
 
-const SYSTEM_PROMPT = `あなたは食事写真からカロリーとPFC（タンパク質/脂質/炭水化物）を概算する栄養士アシスタントです。
-出力は必ず以下のJSONスキーマに**厳密に**従ってください。日本語で記述。
+// Gemini モデル: 2.0-flash は無料枠あり・Vision 対応・低レイテンシ
+const GEMINI_MODEL = "gemini-2.0-flash"
+
+const PROMPT = `あなたは食事写真からカロリーとPFC（タンパク質/脂質/炭水化物）を概算する栄養士アシスタントです。
+出力は必ず以下のJSONスキーマに**厳密に**従い、日本語で記述してください。
 {
   "meal_name": string,
   "estimated_calories": number,        // kcal、整数
@@ -55,18 +57,54 @@ const SYSTEM_PROMPT = `あなたは食事写真からカロリーとPFC（タン
 }
 - 写真からは正確なグラム数を判定できないので、見えるもの・典型的な定食量から概算してください。
 - 不確実性が高い場合は confidence を下げ、notes でその旨を明記してください。
-- JSON 以外の文字（説明文・コードブロック）は一切出力しないでください。`
+- JSON 以外の文字（説明文・コードブロック・マークダウン）は一切出力しないでください。`
+
+// Gemini structured output 用 schema (responseSchema)
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    meal_name: { type: "STRING" },
+    estimated_calories: { type: "NUMBER" },
+    protein_g: { type: "NUMBER" },
+    fat_g: { type: "NUMBER" },
+    carbs_g: { type: "NUMBER" },
+    confidence: { type: "NUMBER" },
+    detected_items: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          estimated_amount: { type: "STRING" },
+          calories: { type: "NUMBER" },
+        },
+        required: ["name", "estimated_amount", "calories"],
+      },
+    },
+    notes: { type: "STRING" },
+  },
+  required: [
+    "meal_name",
+    "estimated_calories",
+    "protein_g",
+    "fat_g",
+    "carbs_g",
+    "confidence",
+    "detected_items",
+    "notes",
+  ],
+}
 
 export async function analyzeMealImage(
   imageBase64: string,
   mimeType: string,
   byteLength: number
 ): Promise<MealAnalysisResult> {
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     throw new MealAnalysisError(
       "missing_api_key",
-      "OPENAI_API_KEY が未設定です。Vercel/ローカルの環境変数を設定してください。"
+      "GEMINI_API_KEY が未設定です。Vercel/ローカルの環境変数を設定してください。"
     )
   }
 
@@ -77,36 +115,35 @@ export async function analyzeMealImage(
     )
   }
 
-  const dataUrl = `data:${mimeType || "image/jpeg"};base64,${imageBase64}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`
 
   let res: Response
   try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
+    res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+        contents: [
           {
             role: "user",
-            content: [
+            parts: [
+              { text: PROMPT },
               {
-                type: "text",
-                text: "この食事写真からカロリーとPFCを推定してください。",
-              },
-              {
-                type: "image_url",
-                image_url: { url: dataUrl, detail: "low" },
+                inline_data: {
+                  mime_type: mimeType || "image/jpeg",
+                  data: imageBase64,
+                },
               },
             ],
           },
         ],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+        },
       }),
     })
   } catch (e) {
@@ -120,21 +157,32 @@ export async function analyzeMealImage(
     const text = await res.text().catch(() => "")
     throw new MealAnalysisError(
       "ai_request_failed",
-      `AI API エラー (${res.status}): ${text.slice(0, 300)}`
+      `Gemini API エラー (${res.status}): ${text.slice(0, 300)}`
     )
   }
 
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[]
+    candidates?: { content?: { parts?: { text?: string }[] } }[]
+    promptFeedback?: { blockReason?: string }
   }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) {
+
+  if (data.promptFeedback?.blockReason) {
+    throw new MealAnalysisError(
+      "ai_request_failed",
+      `セーフティフィルタによりブロックされました: ${data.promptFeedback.blockReason}`
+    )
+  }
+
+  const text = data.candidates?.[0]?.content?.parts
+    ?.map((p) => p.text ?? "")
+    .join("")
+  if (!text) {
     throw new MealAnalysisError("invalid_json", "AIの応答が空でした")
   }
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(content)
+    parsed = JSON.parse(text)
   } catch {
     throw new MealAnalysisError(
       "invalid_json",

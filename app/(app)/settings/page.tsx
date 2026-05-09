@@ -19,6 +19,8 @@ import { useEffect, useState } from "react"
 export default function SettingsPage() {
   const [gymDays, setGymDays] = useState(3)
   const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState("")
   const [plates, setPlates] = useState<number[]>(DEFAULT_PLATE_WEIGHTS)
   const router = useRouter()
@@ -40,12 +42,28 @@ export default function SettingsPage() {
 
   const handleSaveGoal = async () => {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase
-      .from("goals")
-      .upsert({ user_id: user.id, gym_days_per_week: gymDays })
-    setSaving(false)
+    setSaveError(null)
+    setSavedAt(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setSaveError("ログインが必要です")
+        return
+      }
+      const { error } = await supabase
+        .from("goals")
+        .upsert(
+          { user_id: user.id, gym_days_per_week: gymDays },
+          { onConflict: "user_id" }
+        )
+      if (error) {
+        setSaveError(error.message)
+        return
+      }
+      setSavedAt(new Date().toLocaleTimeString("ja-JP"))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleExport = async () => {
@@ -153,9 +171,21 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
-            <Button size="sm" loading={saving} onClick={handleSaveGoal}>
-              保存
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button size="sm" loading={saving} onClick={handleSaveGoal}>
+                保存
+              </Button>
+              {savedAt && !saveError && (
+                <span className="text-xs text-navy-500">
+                  {savedAt} に保存
+                </span>
+              )}
+            </div>
+            {saveError && (
+              <p className="text-xs text-danger bg-red-50 px-3 py-2 rounded-lg">
+                {saveError}
+              </p>
+            )}
           </CardContent>
         </Card>
 

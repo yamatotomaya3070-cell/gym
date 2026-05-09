@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Dumbbell,
   FlameIcon,
+  HeartPulse,
   TrendingUp,
   Trophy,
 } from "lucide-react"
@@ -155,6 +156,20 @@ export default async function DashboardPage() {
               <p className="font-semibold text-gray-900">今日のトレーニングを開始</p>
               <p className="text-xs text-gray-400 mt-0.5">ルーティンを選んで記録を始める</p>
             </div>
+          </div>
+        </Link>
+
+        {/* コンディション管理 */}
+        <Link href="/condition">
+          <div className="bg-surface rounded-2xl border border-border shadow-card p-5 flex items-center gap-4 active:scale-[0.98] transition-transform">
+            <div className="w-12 h-12 bg-navy-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <HeartPulse size={24} className="text-navy-500" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">コンディション管理</p>
+              <p className="text-xs text-gray-400 mt-0.5">睡眠・サプリ・食事・体重・BIG3</p>
+            </div>
+            <span className="text-navy-500 text-sm font-medium">→</span>
           </div>
         </Link>
 

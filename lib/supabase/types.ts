@@ -195,6 +195,59 @@ export interface ProgressPhoto {
   taken_at: string
 }
 
+// ============================================================
+// Yamato専用コンディション管理 (migration 004)
+// ============================================================
+
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "post_workout"
+
+export const MEAL_TYPE_LABELS: Record<MealType, string> = {
+  breakfast:    "朝食",
+  lunch:        "昼食",
+  dinner:       "夕食",
+  snack:        "間食",
+  post_workout: "トレ後",
+}
+
+export interface DailyConditionLog {
+  id: string
+  user_id: string
+  date: string                  // YYYY-MM-DD
+  sleep_hours: number | null
+  condition_score: number | null   // 1-5
+  fatigue_score: number | null     // 1-5
+  appetite_score: number | null    // 1-5
+  water_l: number | null
+  creatine_taken: boolean
+  creatine_g: number | null
+  maca_taken: boolean
+  maca_count: number
+  protein_count: number
+  caffeine_taken: boolean
+  supplement_memo: string | null
+  memo: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MealLog {
+  id: string
+  user_id: string
+  date: string                  // YYYY-MM-DD
+  meal_type: MealType | null
+  meal_name: string | null
+  calories: number | null
+  protein_g: number | null
+  fat_g: number | null
+  carbs_g: number | null
+  image_url: string | null
+  confidence: number | null     // 0-100
+  ai_raw_result: Json | null
+  memo: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Enriched types for UI
 export interface RoutineWithExercises extends Routine {
   routine_exercises: (RoutineExercise & { exercise: Exercise })[]

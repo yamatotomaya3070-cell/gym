@@ -38,8 +38,8 @@ export class MealAnalysisError extends Error {
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024 // 8MB
 
-// Gemini モデル: 2.0-flash は無料枠あり・Vision 対応・低レイテンシ
-const GEMINI_MODEL = "gemini-2.0-flash"
+// Gemini モデル: 2.5-flash は無料枠あり・Vision 対応・低レイテンシ
+const GEMINI_MODEL = "gemini-2.5-flash"
 
 const PROMPT = `あなたは食事写真からカロリーとPFC（タンパク質/脂質/炭水化物）を概算する栄養士アシスタントです。
 出力は必ず以下のJSONスキーマに**厳密に**従い、日本語で記述してください。

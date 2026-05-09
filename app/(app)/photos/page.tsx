@@ -28,6 +28,7 @@ export default function PhotosPage() {
   const [angle, setAngle] = useState<PhotoAngle>("front")
   const [note, setNote] = useState("")
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [comparing, setComparing] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
@@ -44,30 +45,57 @@ export default function PhotosPage() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // 同じファイルを再選択できるように value をクリア
+    if (e.target) e.target.value = ""
     if (!file) return
-    setUploading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
-    const ext = file.name.split(".").pop()
-    const path = `${user.id}/${Date.now()}.${ext}`
-    const { data: storageData, error } = await supabase.storage
-      .from("progress-photos")
-      .upload(path, file)
-    if (!error && storageData) {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setUploadError("ログインが必要です")
+        return
+      }
+
+      // 拡張子: ファイル名 → MIMEタイプ → "jpg" の順で決定
+      const nameExt = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : ""
+      const mimeExt = file.type.split("/")[1]?.toLowerCase() ?? ""
+      const ext = (nameExt || mimeExt || "jpg").replace(/[^a-z0-9]/g, "") || "jpg"
+      const path = `${user.id}/${Date.now()}.${ext}`
+
+      const { error: uploadErr } = await supabase.storage
+        .from("progress-photos")
+        .upload(path, file, {
+          contentType: file.type || "image/jpeg",
+          upsert: false,
+        })
+      if (uploadErr) {
+        setUploadError(`アップロード失敗: ${uploadErr.message}`)
+        return
+      }
+
       const { data: urlData } = supabase.storage.from("progress-photos").getPublicUrl(path)
-      await supabase.from("progress_photos").insert({
+      const { error: insertErr } = await supabase.from("progress_photos").insert({
         user_id: user.id,
         photo_url: urlData.publicUrl,
         angle,
         note: note.trim() || null,
         taken_at: new Date().toISOString().slice(0, 10),
       })
+      if (insertErr) {
+        setUploadError(`保存失敗: ${insertErr.message}`)
+        return
+      }
+
       await load()
       setShowModal(false)
       setNote("")
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "不明なエラー")
+    } finally {
+      setUploading(false)
     }
-    setUploading(false)
   }
 
   const handleDelete = async (photo: ProgressPhoto) => {
@@ -247,10 +275,14 @@ export default function PhotosPage() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             onChange={handleUpload}
             className="hidden"
           />
+          {uploadError && (
+            <p className="text-xs text-danger bg-danger/10 px-3 py-2 rounded-lg">
+              {uploadError}
+            </p>
+          )}
           <Button
             className="w-full"
             size="lg"

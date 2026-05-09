@@ -6,7 +6,9 @@ import { ExerciseCard } from "@/components/session/exercise-card"
 import { IntervalTimer } from "@/components/session/interval-timer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ChevronLeft, X, Dumbbell } from "lucide-react"
+import { Modal } from "@/components/ui/modal"
+import { Input } from "@/components/ui/input"
+import { ChevronLeft, X, Dumbbell, Plus } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useCallback, useEffect, useState } from "react"
@@ -33,13 +35,17 @@ function SessionContent() {
   const searchParams = useSearchParams()
   const preselectedRoutineId = searchParams.get("routineId")
 
-  const { isActive, exercises, currentExerciseIndex, startSession, setCurrentExercise, endSession } =
+  const { isActive, exercises, currentExerciseIndex, startSession, setCurrentExercise, endSession, addExercise } =
     useSessionStore()
 
   const [routines, setRoutines] = useState<RoutineOption[]>([])
   const [selectedRoutine, setSelectedRoutine] = useState<RoutineOption | null>(null)
   const [loading, setLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [showAddExercise, setShowAddExercise] = useState(false)
+  const [allExercises, setAllExercises] = useState<{ id: string; name: string; category: string }[]>([])
+  const [exerciseSearch, setExerciseSearch] = useState("")
+  const [addingExerciseId, setAddingExerciseId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -137,7 +143,64 @@ function SessionContent() {
     setLoading(false)
   }, [selectedRoutine, supabase, startSession])
 
+  const handleOpenAddExercise = useCallback(async () => {
+    setShowAddExercise(true)
+    setExerciseSearch("")
+    if (allExercises.length === 0) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from("exercises")
+        .select("id, name, category")
+        .or(`user_id.is.null,user_id.eq.${user.id}`)
+        .order("name")
+      if (data) setAllExercises(data)
+    }
+  }, [allExercises.length, supabase])
+
+  const handleAddExercise = useCallback(
+    async (ex: { id: string; name: string; category: string }) => {
+      setAddingExerciseId(ex.id)
+      const { data: prevSets } = await supabase
+        .from("session_sets")
+        .select("set_number, weight_kg, reps, rpe")
+        .eq("exercise_id", ex.id)
+        .eq("is_completed", true)
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      const uniquePrev = (prevSets ?? [])
+        .filter((v, i, arr) => arr.findIndex((x) => x.set_number === v.set_number) === i)
+        .sort((a, b) => a.set_number - b.set_number)
+
+      const defaultSets = Math.max(1, uniquePrev.length || 3)
+
+      addExercise({
+        exerciseId: ex.id,
+        exerciseName: ex.name,
+        category: ex.category,
+        defaultRestSeconds: 90,
+        sets: Array.from({ length: defaultSets }, (_, i) => ({
+          id: crypto.randomUUID(),
+          weightKg: uniquePrev[i]?.weight_kg ?? null,
+          reps: uniquePrev[i]?.reps ?? null,
+          rpe: null,
+          isCompleted: false,
+        })),
+        previousSets: uniquePrev.map((p) => ({
+          weightKg: p.weight_kg,
+          reps: p.reps,
+          rpe: p.rpe,
+        })),
+      })
+      setAddingExerciseId(null)
+      setShowAddExercise(false)
+    },
+    [supabase, addExercise]
+  )
+
   const handleFinish = useCallback(async () => {
+    if (!confirm("トレーニングを終了して保存しますか？")) return
     setIsSaving(true)
     const store = useSessionStore.getState()
     const { sessionId, exercises: storeExercises } = store
@@ -269,6 +332,13 @@ function SessionContent() {
             </button>
           )
         })}
+        <button
+          onClick={handleOpenAddExercise}
+          className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-navy-50 text-navy-500 hover:bg-navy-100 flex items-center gap-1"
+        >
+          <Plus size={12} />
+          種目追加
+        </button>
       </div>
 
       <div className="px-4 py-4 space-y-4">
@@ -293,6 +363,46 @@ function SessionContent() {
           トレーニング終了 & 保存
         </Button>
       </div>
+
+      <Modal
+        isOpen={showAddExercise}
+        onClose={() => setShowAddExercise(false)}
+        title="種目を追加"
+      >
+        <div className="space-y-3">
+          <Input
+            placeholder="種目名で検索"
+            value={exerciseSearch}
+            onChange={(e) => setExerciseSearch(e.target.value)}
+            autoFocus
+          />
+          <div className="max-h-[60dvh] overflow-y-auto -mx-1 px-1 space-y-1">
+            {allExercises
+              .filter((ex) => !exercises.some((s) => s.exerciseId === ex.id))
+              .filter((ex) =>
+                exerciseSearch
+                  ? ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                  : true
+              )
+              .map((ex) => (
+                <button
+                  key={ex.id}
+                  onClick={() => handleAddExercise(ex)}
+                  disabled={addingExerciseId === ex.id}
+                  className="w-full text-left px-3 py-2.5 rounded-xl border border-border hover:bg-surface-secondary disabled:opacity-50 flex items-center justify-between"
+                >
+                  <span className="text-sm text-gray-900 truncate">{ex.name}</span>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">
+                    {ex.category}
+                  </span>
+                </button>
+              ))}
+            {allExercises.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">読み込み中...</p>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

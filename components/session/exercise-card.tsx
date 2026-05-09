@@ -97,7 +97,6 @@ export function ExerciseCard({
               size="sm"
               className="flex-1"
               onClick={() => addSet(exerciseIndex)}
-              disabled={isAllDone}
             >
               <Plus size={14} />
               セット追加
@@ -106,7 +105,7 @@ export function ExerciseCard({
               variant="ghost"
               size="sm"
               onClick={() => removeSet(exerciseIndex, exercise.sets.length - 1)}
-              disabled={exercise.sets.length <= 1 || isAllDone}
+              disabled={exercise.sets.length <= 1}
             >
               <Minus size={14} />
             </Button>

@@ -53,6 +53,8 @@ export interface SessionStoreState {
   completeSet: (exerciseIndex: number, setIndex: number) => void
   addSet: (exerciseIndex: number) => void
   removeSet: (exerciseIndex: number, setIndex: number) => void
+  addExercise: (exercise: ExerciseSessionData) => void
+  removeExercise: (exerciseIndex: number) => void
   startTimer: (seconds: number, exerciseIndex: number, setIndex: number) => void
   stopTimer: () => void
   setCurrentExercise: (index: number) => void
@@ -138,6 +140,19 @@ export const useSessionStore = create<SessionStoreState>()(
         exercise.sets = exercise.sets.filter((_, i) => i !== setIndex)
         exercises[exerciseIndex] = exercise
         set({ exercises })
+      },
+
+      addExercise: (exercise) => {
+        const exercises = [...get().exercises, exercise]
+        set({ exercises, currentExerciseIndex: exercises.length - 1 })
+      },
+
+      removeExercise: (exerciseIndex) => {
+        const exercises = get().exercises.filter((_, i) => i !== exerciseIndex)
+        const current = get().currentExerciseIndex
+        const nextIndex =
+          current >= exercises.length ? Math.max(0, exercises.length - 1) : current
+        set({ exercises, currentExerciseIndex: nextIndex })
       },
 
       startTimer: (seconds, exerciseIndex, setIndex) => {

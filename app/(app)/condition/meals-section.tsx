@@ -30,6 +30,7 @@ import type { MealAnalysisResult } from "@/lib/ai/analyze-meal-image"
 
 const PROTEIN_GOAL_MIN = 120
 const PROTEIN_GOAL_MAX = 150
+const PROTEIN_PER_SHAKE_G = 30
 
 const MEAL_TYPE_ORDER: MealType[] = [
   "breakfast",
@@ -43,6 +44,7 @@ interface Props {
   userId: string
   date: string
   initialMeals: MealLog[]
+  proteinShakeCount: number   // daily_condition_logs.protein_count
 }
 
 type FormState = {
@@ -74,7 +76,12 @@ const emptyForm = (): FormState => ({
   ai_raw_result: null,
 })
 
-export function MealsSection({ userId, date, initialMeals }: Props) {
+export function MealsSection({
+  userId,
+  date,
+  initialMeals,
+  proteinShakeCount,
+}: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -97,8 +104,10 @@ export function MealsSection({ userId, date, initialMeals }: Props) {
     )
   }, [meals])
 
-  const proteinRemainingMin = Math.max(0, PROTEIN_GOAL_MIN - totals.p)
-  const proteinRemainingMax = Math.max(0, PROTEIN_GOAL_MAX - totals.p)
+  const shakeProtein = proteinShakeCount * PROTEIN_PER_SHAKE_G
+  const totalProteinAll = totals.p + shakeProtein
+  const proteinRemainingMin = Math.max(0, PROTEIN_GOAL_MIN - totalProteinAll)
+  const proteinRemainingMax = Math.max(0, PROTEIN_GOAL_MAX - totalProteinAll)
 
   const sortedMeals = useMemo(() => {
     return [...meals].sort((a, b) => {
@@ -289,21 +298,34 @@ export function MealsSection({ userId, date, initialMeals }: Props) {
             <Macro label="F" value={totals.f} />
             <Macro label="C" value={totals.c} />
           </div>
-          <div className="flex items-start gap-2 pt-2 border-t border-border">
-            <Beef size={14} className="text-warning mt-0.5" />
-            <div className="text-xs text-gray-600 leading-relaxed">
-              目標タンパク質
-              <span className="font-semibold text-gray-900 mx-1">
-                {PROTEIN_GOAL_MIN}〜{PROTEIN_GOAL_MAX}g
+          <div className="pt-2 border-t border-border space-y-1.5">
+            <div className="flex items-start gap-2">
+              <Beef size={14} className="text-warning mt-0.5" />
+              <div className="text-xs text-gray-600 leading-relaxed flex-1">
+                目標タンパク質
+                <span className="font-semibold text-gray-900 mx-1">
+                  {PROTEIN_GOAL_MIN}〜{PROTEIN_GOAL_MAX}g
+                </span>
+                まであと
+                <span className="font-semibold text-gray-900 mx-1">
+                  {proteinRemainingMin === 0 && proteinRemainingMax === 0
+                    ? "達成 ✓"
+                    : `${proteinRemainingMin}〜${proteinRemainingMax}g`}
+                </span>
+              </div>
+            </div>
+            <div className="text-[11px] text-gray-500 pl-5 leading-relaxed">
+              現在合計{" "}
+              <span className="font-semibold text-gray-900">
+                {totalProteinAll.toFixed(1)}g
               </span>
-              まであと
-              <span className="font-semibold text-gray-900 mx-1">
-                {proteinRemainingMin === 0 && proteinRemainingMax === 0
-                  ? "達成 ✓"
-                  : `${proteinRemainingMin}〜${proteinRemainingMax}g`}
-              </span>
-              <span className="text-gray-400 block">
-                現在 {totals.p.toFixed(1)}g
+              <span className="text-gray-400">
+                {" "}
+                = 食事 {totals.p.toFixed(1)}g + プロテイン{" "}
+                {shakeProtein.toFixed(0)}g
+                {proteinShakeCount > 0
+                  ? ` (${proteinShakeCount}回×${PROTEIN_PER_SHAKE_G}g)`
+                  : ""}
               </span>
             </div>
           </div>

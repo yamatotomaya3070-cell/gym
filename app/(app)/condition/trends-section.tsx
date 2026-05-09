@@ -6,6 +6,7 @@ import type { DayFlags } from "@/components/condition/condition-calendar"
 import { TrendsClient, type AllSeries } from "./trends-client"
 
 const PROTEIN_GOAL_MIN = 120
+const PROTEIN_PER_SHAKE_G = 30
 
 // グラフ用に取得する最大期間（日）。「全期間」もこの範囲で表示。
 const FETCH_DAYS = 365
@@ -104,6 +105,13 @@ export async function TrendsSection({ userId }: Props) {
     calMap[m.date] = (calMap[m.date] ?? 0) + (m.calories ?? 0)
     proMap[m.date] = (proMap[m.date] ?? 0) + Number(m.protein_g ?? 0)
   }
+  // プロテインシェイク分を合算 (1回 = 30g)
+  for (const c of cond ?? []) {
+    const shakeP = (c.protein_count ?? 0) * PROTEIN_PER_SHAKE_G
+    if (shakeP > 0) {
+      proMap[c.date] = (proMap[c.date] ?? 0) + shakeP
+    }
+  }
   const calSeries: TrendPoint[] = sortDateSeries(calMap)
   const proSeries: TrendPoint[] = sortDateSeries(proMap)
 
@@ -162,10 +170,12 @@ export async function TrendsSection({ userId }: Props) {
     const date = s.started_at.slice(0, 10)
     ensure(date).trained = true
   }
+  // 食事があった日にフラグ。proMap はシェイク分も含むので目標判定にそのまま使える
+  for (const m of meals ?? []) {
+    ensure(m.date).hasMeal = true
+  }
   for (const date of Object.keys(proMap)) {
-    const f = ensure(date)
-    f.hasMeal = true
-    if (proMap[date] >= PROTEIN_GOAL_MIN) f.proteinGoal = true
+    if (proMap[date] >= PROTEIN_GOAL_MIN) ensure(date).proteinGoal = true
   }
 
   const series: AllSeries = {

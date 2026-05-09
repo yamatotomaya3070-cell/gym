@@ -107,7 +107,12 @@ export default async function ConditionPage() {
         </Card>
 
         {/* 今日の食事 (合計 + ログ + 入力) */}
-        <MealsSection userId={user.id} date={today} initialMeals={todaysMeals} />
+        <MealsSection
+          userId={user.id}
+          date={today}
+          initialMeals={todaysMeals}
+          proteinShakeCount={cond?.protein_count ?? 0}
+        />
 
         {/* 今日の体重 */}
         <WeightCard

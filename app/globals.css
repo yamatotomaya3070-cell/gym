@@ -44,14 +44,15 @@
     padding-top: env(safe-area-inset-top);
   }
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+    /* iPhone ホームバー回避：safe-area が 0 のブラウザでも最低 12px 確保 */
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
   .pb-nav {
-    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
   /* 編集ページの保存ボタン：BottomNavの上に配置 */
   .bottom-above-nav {
-    bottom: calc(4rem + env(safe-area-inset-bottom));
+    bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
 }
 
